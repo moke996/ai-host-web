@@ -84,9 +84,9 @@
                
        <!-- 历史记录对话框 -->
        <el-dialog title="历史记录" v-model="dialogTableVisible">
-            <el-table :data="gridData" max-height="250">
+            <el-table :data="gridData" max-height="500">
                 <el-table-column property="name" label="名称" width="150"></el-table-column>
-                <el-table-column property="description" label="描述" width = "350"></el-table-column>
+                <el-table-column property="description" label="描述" width = "400"></el-table-column>
                 <el-table-column label="操作" width="150">
                     <template #default="scope">
                         <el-button @click="getHistory(scope.row)" type="primary" plain size="small">查看</el-button>
@@ -251,6 +251,7 @@
                         message: '删除成功！'
                     });
                     this.isDelete = 0
+                    this.dialogTableVisible = false
                 } catch (error) {
                     console.error('请求失败：', error);
                 }

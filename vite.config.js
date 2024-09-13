@@ -5,3 +5,5 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
 })
+// 确保正确配置 Element Plus 库
+
