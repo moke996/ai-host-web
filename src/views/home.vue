@@ -36,7 +36,7 @@
                 </div>
             </el-aside>
             <el-container>
-                <el-main width = "800">
+                <el-main >
                     <div>
                         <!-- 聊天对话框 -->
                         <div class="chat-container">
@@ -45,7 +45,7 @@
                                 :key="index"
                                 :class="['chat-bubble', message.sender === 'user' ? 'user-bubble' : 'server-bubble']"
                             >
-                            <pre>{{ message.text }}</pre> <!-- 使用 <pre> 保留换行符 -->
+                           <div class="message-text">{{ message.text }}</div>
                             </div>
                         </div>
                         <div class="input-area">
@@ -121,18 +121,19 @@
             formLabelWidth: '120px',
             gridData: [],
             startTag: 0,
-            BASE_URL: "http://localhost:10005",
+            URL: "http://ec2-54-255-193-42.ap-southeast-1.compute.amazonaws.com",
             userInput: '',
             messages:[],
             nextStep: '',
-            isDelete: 0
+            isDelete: 0,
+            stopIndex: 0,
 
         }
     },
     methods: {
         async  getVersion (){
             try {
-                const response = await axios.get(this.BASE_URL+`/api/v1/host/versions`);
+                const response = await axios.get(this.URL+`/api/v1/host/versions`);
                 console.log('请求成功：', response.data.data);
                 this.versions = response.data.data
             } catch (error) {
@@ -145,16 +146,15 @@
                 this.startTag = now.getTime();
             }
             try {
-                const response = await axios.post(this.BASE_URL+`/api/v1/host/start`,{
+                const response = await axios.post(this.URL+`/api/v1/host/start`,{
                     "version": this.version,
                     "tag": this.startTag,
                     "male": this.male,
                     "female": this.female
                 });
                 this.messages.push({ text: response.data.data.ai_answer, sender: 'server' });
-                this.nextStep = response.data.data.next_step
-                this.Run()
-
+                this.nextStep = response.data.data.nextstep
+                await this.run()
             } catch (error) {
                 console.error('请求失败：', error);
             }
@@ -177,53 +177,62 @@
             if (!this.userInput) return;
             // 添加用户输入到消息列表
             this.messages.push({ text: this.userInput, sender: 'user' });
-            this.Run()
+            this.stopIndex++
+            const index = 0
+            await this.run()
             // 清空用户输入
             this.userInput = '';
         },
 
         async saveRecord() {
             try {
-                const response = await axios.post(this.BASE_URL+`/api/v1/host/save`,{
+                const response = await axios.post(this.URL+`/api/v1/host/save`,{
                     "version": this.version,
                     "title": this.saveForm.title,
-                    "into": this.saveForm.info,
+                    "description": this.saveForm.info,
                     "tag": this.startTag,
-                    "message": this.message
+                    "message": this.messages
                 });
-                this.messages.push({ text: response.data.data.ai_answer, sender: 'server' });
-                this.nextStep = response.data.data.next_step
-                this.Run()
+                this.$message({
+                        type: 'success',
+                        message: '保存成功！'
+                    });
+                this.dialogFormVisible = false
 
             } catch (error) {
                 console.error('请求失败：', error);
             }
         },
 
-        async Run() {
+        async run() {
             try {
-            // 发起 HTTP POST 请求
-            const response = await axios.post(this.BASE_URL+`/api/v1/host/run`,{
-                    "version": this.version,
-                    "tag": this.startTag,
-                    "content": this.userInput,
-                    "next": this.nextStep
-                });
+                // 发起 HTTP POST 请求
+                const res =  await axios.post(this.URL+`/api/v1/host/run`,{
+                        "version": this.version,
+                        "tag": this.startTag,
+                        "content": this.userInput,
+                        "next": this.nextStep
+                    });
 
-            // 将服务器响应添加到消息列表
-            this.messages.push({ text: response.data.data.ai_answer, sender: 'server' });
-            this.nextStep = response.data.data.next_step
-            
-            for (let i = 0; i < 100; i++) {
-                if (this.nextStep !== "user_answer") {
-                    this.Run()
-                }else{
-                    break
+                // // 将服务器响应添加到消息列表
+                if (res.data.data.ai_answer !== ""){
+                    this.messages.push({ text: res.data.data.ai_answer, sender: 'server' });
                 }
-            }
+                this.nextStep = res.data.data.nextstep
+                if (this.nextStep != 'useranswer'){
+                    if (this.stopIndex < 8) {
+                        await this.run()
+                    }else{
+                        this.$message({
+                        type: 'danger',
+                        message: '已达到对话次数上限：8'
+                    });
+                    }
+                    
+                }
             } catch (error) {
                 console.error('Error making POST request:', error);
-                this.messages.push({ text: 'Error: Unable to fetch response from server', sender: 'server' });
+                // this.messages.push({ text: 'Error: Unable to fetch response from server', sender: 'server' });
             }
         },
 
@@ -236,7 +245,7 @@
             });
             if (this.isDelete == 1){
                 try {
-                    const response = await axios.post(this.BASE_URL+`/api/v1/host/history/`+row.id);
+                    const response = await axios.post(this.URL+`/api/v1/host/history/`+row.id);
                     this.$message({
                         type: 'success',
                         message: '删除成功！'
@@ -249,20 +258,21 @@
         },
         async getHistory(row){
             try {
-                    const response = await axios.get(this.BASE_URL+`/api/v1/host/history/`+row.id);
+                    const response = await axios.get(this.URL+`/api/v1/host/history/`+row.id);
                      const data = response.data.data
                      this.male = data.male 
                      this.female = data.female
                      this.version = data.version
                      this.messages = data.messages
+                     this.dialogTableVisible = false
                 } catch (error) {
                     console.error('请求失败：', error);
                 }
         },
-        async getHistoryList(row){
+        async getHistoryList(){
             this.dialogTableVisible = true
             try {
-                    const response = await axios.get(this.BASE_URL+`/api/v1/host/histories`);
+                    const response = await axios.get(this.URL+`/api/v1/host/histories`);
                     this.gridData = response.data.data
                 } catch (error) {
                     console.error('请求失败：', error);
@@ -339,7 +349,7 @@
 .chat-container {
   max-width: 950px;
   margin-top: 8px ;
-  border: 1px solid #ddd;
+  border: 2px solid #ddd;
   border-radius: 10px;
   padding: 10px;
   height: 500px;
@@ -355,6 +365,12 @@
   max-width: 70%;
   word-wrap: break-word;
   white-space: pre-wrap; /* 保留空白和换行 */
+  word-wrap: break-word; /* 强制长单词换行 */
+  word-break: break-word; /* 强制长单词在容器边界内换行 */
+}
+
+.message-text {
+  white-space: pre-wrap; /* 保留换行符并允许自动换行 */
 }
 
 .user-bubble {
@@ -364,7 +380,7 @@
 }
 
 .server-bubble {
-  background-color: #c6c2c2; /* 白色气泡 */
+  background-color: #f0ebeb; /* 白色气泡 */
   align-self: flex-start;
   text-align: left;
 }
